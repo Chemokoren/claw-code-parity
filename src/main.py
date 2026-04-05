@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from .bootstrap_graph import build_bootstrap_graph
 from .command_graph import build_command_graph
@@ -19,8 +20,28 @@ from .tools import execute_tool, get_tool, get_tools, render_tool_index
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description='Python porting workspace for the Claude Code rewrite effort')
-    subparsers = parser.add_subparsers(dest='command', required=True)
+    parser = argparse.ArgumentParser(
+        description='Claw — AI Coding Assistant powered by Claude',
+        epilog='Run without a command to launch the interactive assistant.',
+    )
+    subparsers = parser.add_subparsers(dest='command', required=False)
+
+    # === AI Assistant commands ===
+    chat_parser = subparsers.add_parser('chat', help='launch the interactive AI coding assistant (default)')
+    chat_parser.add_argument('--workspace', '-w', type=str, default=None,
+                             help='path to the project workspace')
+    chat_parser.add_argument('--model', '-m', type=str, default=None,
+                             help='override the model (e.g. minimax-m2.5)')
+    chat_parser.add_argument('--provider', '-p', type=str, default=None,
+                             help='provider preset (ollama, openai, deepseek, groq, gemini, ...)')
+
+    ask_parser = subparsers.add_parser('ask', help='ask a one-shot question without entering the REPL')
+    ask_parser.add_argument('prompt', help='the question or task to perform')
+    ask_parser.add_argument('--workspace', '-w', type=str, default=None)
+    ask_parser.add_argument('--provider', '-p', type=str, default=None)
+    ask_parser.add_argument('--model', '-m', type=str, default=None)
+
+    # === Legacy parity commands ===
     subparsers.add_parser('summary', help='render a Markdown summary of the Python porting workspace')
     subparsers.add_parser('manifest', help='print the current Python workspace manifest')
     subparsers.add_parser('parity-audit', help='compare the Python workspace against the local ignored TypeScript archive when available')
@@ -94,6 +115,33 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+
+    # Default to 'chat' if no command given
+    if args.command is None or args.command == 'chat':
+        from .config import ClawConfig
+        from .repl import run_repl
+        provider = getattr(args, 'provider', None)
+        cfg = ClawConfig(provider=provider) if provider else ClawConfig()
+        if hasattr(args, 'workspace') and args.workspace:
+            cfg.workspace = Path(args.workspace).expanduser().resolve()
+        if hasattr(args, 'model') and args.model:
+            cfg.model = args.model
+        run_repl(cfg)
+        return 0
+
+    if args.command == 'ask':
+        from .agent import Agent
+        from .config import ClawConfig
+        provider = getattr(args, 'provider', None)
+        cfg = ClawConfig(provider=provider) if provider else ClawConfig()
+        if args.workspace:
+            cfg.workspace = Path(args.workspace).expanduser().resolve()
+        if getattr(args, 'model', None):
+            cfg.model = args.model
+        agent = Agent(config=cfg)
+        agent.chat(args.prompt)
+        return 0
+
     manifest = build_port_manifest()
     if args.command == 'summary':
         print(QueryEnginePort(manifest).render_summary())

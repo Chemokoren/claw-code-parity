@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import unittest
 from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from src.commands import PORTED_COMMANDS
 from src.parity_audit import run_parity_audit
@@ -13,6 +16,154 @@ from src.tools import PORTED_TOOLS
 
 
 class PortingWorkspaceTests(unittest.TestCase):
+    def test_auto_provider_prefers_gpu_backed_ollama(self) -> None:
+        from src.config import ClawConfig
+        from src.local_runtime import LocalRuntimeStatus, ProviderResolution
+
+        runtime = LocalRuntimeStatus(
+            gpu_present=True,
+            gpu_usable=True,
+            gpu_backend='nvidia',
+            gpu_summary='NVIDIA GPU acceleration is available (Mock GPU).',
+            ollama_reachable=True,
+            ollama_base_url='http://localhost:11434/v1',
+            ollama_summary='Ollama is reachable at http://localhost:11434/v1 and should use nvidia acceleration.',
+        )
+
+        with patch(
+            'src.config.resolve_provider_choice',
+            return_value=ProviderResolution(
+                provider='ollama',
+                reason='Auto-selected Ollama because local GPU-backed inference is available.',
+                local_runtime=runtime,
+            ),
+        ):
+            cfg = ClawConfig(provider='auto')
+
+        self.assertEqual(cfg.provider, 'ollama')
+        self.assertIn('GPU-backed inference', cfg.provider_reason)
+        self.assertTrue(cfg.local_runtime.gpu_usable)
+
+    def test_explicit_provider_is_preserved_even_with_auto_runtime_logic(self) -> None:
+        from src.config import ClawConfig
+        from src.local_runtime import LocalRuntimeStatus, ProviderResolution
+
+        runtime = LocalRuntimeStatus(
+            gpu_present=True,
+            gpu_usable=False,
+            gpu_backend='nvidia',
+            gpu_summary='NVIDIA GPU hardware is present, but the driver/runtime is not active.',
+            ollama_reachable=False,
+            ollama_base_url='http://localhost:11434/v1',
+            ollama_summary='Ollama is not reachable at http://localhost:11434/v1.',
+        )
+
+        with patch(
+            'src.config.resolve_provider_choice',
+            return_value=ProviderResolution(
+                provider='anthropic',
+                reason='Explicit provider `anthropic` selected.',
+                local_runtime=runtime,
+            ),
+        ):
+            cfg = ClawConfig(provider='anthropic', api_key='test-key')
+
+        self.assertEqual(cfg.provider, 'anthropic')
+        self.assertIn('Explicit provider', cfg.provider_reason)
+
+    def test_zai_provider_uses_zai_api_key_and_default_model(self) -> None:
+        from src.config import ClawConfig
+        from src.local_runtime import LocalRuntimeStatus, ProviderResolution
+
+        runtime = LocalRuntimeStatus(
+            gpu_present=False,
+            gpu_usable=False,
+            gpu_backend=None,
+            gpu_summary='No supported local GPU acceleration runtime was detected; local inference will use CPU.',
+            ollama_reachable=False,
+            ollama_base_url='http://localhost:11434/v1',
+            ollama_summary='Ollama is not reachable at http://localhost:11434/v1.',
+        )
+
+        with patch(
+            'src.config.resolve_provider_choice',
+            return_value=ProviderResolution(
+                provider='zai',
+                reason='Explicit provider `zai` selected.',
+                local_runtime=runtime,
+            ),
+        ), patch.dict(
+            os.environ,
+            {
+                'ZAI_API_KEY': 'zai-test-key',
+                'ZAI_MODEL': 'glm-5.1',
+                'OPENAI_BASE_URL': 'https://api.z.ai/api/coding/paas/v4',
+            },
+            clear=False,
+        ):
+            cfg = ClawConfig(provider='zai')
+
+        self.assertEqual(cfg.provider, 'zai')
+        self.assertEqual(cfg.api_key, 'zai-test-key')
+        self.assertEqual(cfg.model, 'glm-5.1')
+        self.assertEqual(cfg.base_url, 'https://api.z.ai/api/coding/paas/v4')
+
+    def test_ollama_provider_prefers_ollama_base_url_over_generic_openai_base_url(self) -> None:
+        from src.config import ClawConfig
+        from src.local_runtime import LocalRuntimeStatus, ProviderResolution
+
+        runtime = LocalRuntimeStatus(
+            gpu_present=False,
+            gpu_usable=False,
+            gpu_backend=None,
+            gpu_summary='No supported local GPU acceleration runtime was detected; local inference will use CPU.',
+            ollama_reachable=False,
+            ollama_base_url='http://localhost:11434/v1',
+            ollama_summary='Ollama is not reachable at http://localhost:11434/v1.',
+        )
+
+        with patch(
+            'src.config.resolve_provider_choice',
+            return_value=ProviderResolution(
+                provider='ollama',
+                reason='Explicit provider `ollama` selected.',
+                local_runtime=runtime,
+            ),
+        ), patch.dict(
+            os.environ,
+            {
+                'OLLAMA_BASE_URL': 'http://localhost:11434/v1',
+                'OPENAI_BASE_URL': 'https://api.z.ai/api/coding/paas/v4',
+            },
+            clear=False,
+        ):
+            cfg = ClawConfig(provider='ollama')
+
+        self.assertEqual(cfg.base_url, 'http://localhost:11434/v1')
+
+    def test_auto_provider_can_fallback_to_zai_when_key_is_present(self) -> None:
+        from src.local_runtime import LocalRuntimeStatus, resolve_provider_choice
+
+        runtime = LocalRuntimeStatus(
+            gpu_present=False,
+            gpu_usable=False,
+            gpu_backend=None,
+            gpu_summary='No supported local GPU acceleration runtime was detected; local inference will use CPU.',
+            ollama_reachable=False,
+            ollama_base_url='http://localhost:11434/v1',
+            ollama_summary='Ollama is not reachable at http://localhost:11434/v1.',
+        )
+
+        with patch('src.local_runtime.detect_local_runtime', return_value=runtime), patch.dict(
+            os.environ,
+            {'ZAI_API_KEY': 'zai-test-key'},
+            clear=True,
+        ):
+            resolution = resolve_provider_choice('auto')
+
+        self.assertEqual(resolution.provider, 'zai')
+        self.assertIn('Auto-selected `zai`', resolution.reason)
+
     def test_manifest_counts_python_files(self) -> None:
         manifest = build_port_manifest()
         self.assertGreaterEqual(manifest.total_python_files, 20)
@@ -69,6 +220,63 @@ class PortingWorkspaceTests(unittest.TestCase):
         )
         self.assertIn('Command entries:', commands_result.stdout)
         self.assertIn('Tool entries:', tools_result.stdout)
+
+    def test_skill_registry_discovers_skills_and_aliases(self) -> None:
+        from src.skill_registry import (
+            build_skill_invocation_prompt,
+            discover_skills,
+            find_skill,
+        )
+
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            pack_skill = root / '.claude' / 'skills' / 'gstack' / 'qa'
+            pack_skill.mkdir(parents=True)
+            pack_skill.joinpath('SKILL.md').write_text(
+                '---\n'
+                'name: qa\n'
+                'description: |\n'
+                '  Test the app end to end.\n'
+                '---\n'
+                '\n'
+                '# QA\n',
+                encoding='utf-8',
+            )
+
+            codex_skill = root / '.agents' / 'skills' / 'gstack-office-hours'
+            codex_skill.mkdir(parents=True)
+            codex_skill.joinpath('SKILL.md').write_text(
+                '---\n'
+                'name: office-hours\n'
+                'description: |\n'
+                '  Brainstorm product directions.\n'
+                '---\n'
+                '\n'
+                '# Office Hours\n',
+                encoding='utf-8',
+            )
+
+            skills = discover_skills(
+                roots=[
+                    root / '.claude' / 'skills',
+                    root / '.agents' / 'skills',
+                ],
+            )
+
+            self.assertEqual([skill.command_name for skill in skills], ['office-hours', 'qa'])
+            self.assertIsNotNone(find_skill('qa', roots=[root / '.claude' / 'skills']))
+            self.assertIsNotNone(find_skill('gstack-office-hours', roots=[root / '.agents' / 'skills']))
+
+            office_hours = find_skill('office-hours', roots=[root / '.agents' / 'skills'])
+            self.assertIsNotNone(office_hours)
+            prompt = build_skill_invocation_prompt(
+                office_hours,
+                'Help me think through a launch plan',
+                root,
+            )
+            self.assertIn('Run the installed skill `/office-hours`', prompt)
+            self.assertIn('Help me think through a launch plan', prompt)
+            self.assertIn(str(root), prompt)
 
     def test_subsystem_packages_expose_archive_metadata(self) -> None:
         from src import assistant, bridge, utils
@@ -158,6 +366,32 @@ class PortingWorkspaceTests(unittest.TestCase):
         self.assertIn('Setup Report', setup_result.stdout)
         self.assertIn('Command entries:', command_result.stdout)
         self.assertIn('Tool entries:', tool_result.stdout)
+
+    def test_skills_cli_lists_discovered_skills(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            skill_dir = root / '.agents' / 'skills' / 'gstack-qa'
+            skill_dir.mkdir(parents=True)
+            skill_dir.joinpath('SKILL.md').write_text(
+                '---\n'
+                'name: qa\n'
+                'description: |\n'
+                '  Test the app end to end.\n'
+                '---\n',
+                encoding='utf-8',
+            )
+
+            env = dict(os.environ)
+            env['CLAW_SKILL_ROOTS'] = str(root / '.agents' / 'skills')
+            result = subprocess.run(
+                [sys.executable, '-m', 'src.main', 'skills', '--query', 'qa'],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertIn('Installed skills:', result.stdout)
+            self.assertIn('/qa', result.stdout)
 
     def test_load_session_cli_runs(self) -> None:
         from src.runtime import PortRuntime

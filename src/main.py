@@ -15,6 +15,7 @@ from .remote_runtime import run_remote_mode, run_ssh_mode, run_teleport_mode
 from .runtime import PortRuntime
 from .session_store import load_session
 from .setup import run_setup
+from .skill_registry import render_skill_index
 from .tool_pool import assemble_tool_pool
 from .tools import execute_tool, get_tool, get_tools, render_tool_index
 
@@ -57,6 +58,10 @@ def build_parser() -> argparse.ArgumentParser:
     commands_parser.add_argument('--query')
     commands_parser.add_argument('--no-plugin-commands', action='store_true')
     commands_parser.add_argument('--no-skill-commands', action='store_true')
+
+    skills_parser = subparsers.add_parser('skills', help='list installed skill slash commands available to the REPL')
+    skills_parser.add_argument('--limit', type=int, default=20)
+    skills_parser.add_argument('--query')
 
     tools_parser = subparsers.add_parser('tools', help='list mirrored tool entries from the archived snapshot')
     tools_parser.add_argument('--limit', type=int, default=20)
@@ -176,6 +181,9 @@ def main(argv: list[str] | None = None) -> int:
             output_lines = [f'Command entries: {len(commands)}', '']
             output_lines.extend(f'- {module.name} — {module.source_hint}' for module in commands[: args.limit])
             print('\n'.join(output_lines))
+        return 0
+    if args.command == 'skills':
+        print(render_skill_index(limit=args.limit, query=args.query))
         return 0
     if args.command == 'tools':
         if args.query:

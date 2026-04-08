@@ -142,6 +142,154 @@ python3 -m src.main commands --limit 10
 python3 -m src.main tools --limit 10
 ```
 
+## Local Assistant
+
+The Python assistant surface now includes a small launcher toolkit under `scripts/`:
+
+| Script | Purpose | Requirements |
+| --- | --- | --- |
+| `./scripts/status-local-ai.sh` | Show local runtime status, installed tools, active model routing, and detected skills | none |
+| `./scripts/run-auto.sh` | Start the assistant in auto mode, preferring local Ollama and GPU-backed local inference when available | none |
+| `./scripts/run-ollama.sh` | Force local Ollama using the repo's local-model defaults | local Ollama runtime |
+| `./scripts/run-claude.sh` | Force Anthropic API mode for the Python assistant | `ANTHROPIC_API_KEY` |
+| `./scripts/run-glm.sh` | Force GLM-5.1 through Z.AI's coding endpoint | `ZAI_API_KEY` |
+| `./scripts/setup-gstack-codex.sh` | Install gstack skills for Codex from a detected local gstack checkout | local gstack checkout |
+| `./scripts/setup-gstack-claude.sh` | Install gstack skills for Claude from a detected local gstack checkout | local gstack checkout |
+
+All launcher scripts auto-load the repo-root `.env` file. Explicit shell exports still take precedence, and keeping one provider block active at a time remains the clearest setup.
+
+### Default Behavior
+
+The repo-local configuration now defaults to `CLAW_PROVIDER=auto`.
+
+In `auto` mode the assistant:
+
+- prefers local Ollama when it is reachable
+- prefers GPU-backed local inference when the local runtime supports it
+- falls back cleanly when local Ollama is unavailable
+
+Recommended startup:
+
+```bash
+./scripts/run-auto.sh
+```
+
+Inspect the detected local state before starting:
+
+```bash
+./scripts/status-local-ai.sh
+```
+
+### Provider Modes
+
+Force local Ollama with `qwen2.5-coder:7b`:
+
+```bash
+./scripts/run-ollama.sh
+./scripts/run-ollama.sh ask "explain src/config.py"
+```
+
+Force Anthropic API mode for the Python assistant:
+
+```bash
+export ANTHROPIC_API_KEY=...
+./scripts/run-claude.sh
+./scripts/run-claude.sh ask "review src/repl.py"
+```
+
+Note: `run-claude.sh` targets the Anthropic API from the Python assistant. It does not install or invoke the separate `claude` terminal CLI.
+
+Force GLM-5.1 through Z.AI's coding endpoint:
+
+```bash
+export ZAI_API_KEY=...
+./scripts/run-glm.sh
+./scripts/run-glm.sh ask "explain src/config.py"
+```
+
+`run-glm.sh` reads `ZAI_API_KEY` from either your current shell or the repo-root `.env`.
+
+### REPL Commands
+
+The launcher scripts start the interactive Python REPL. Inside the `claw>` prompt you can use:
+
+- `/help` to show the built-in command list
+- `/provider` to show the active provider, model, base URL, and provider presets
+- `/skills` to list installed slash-skill commands discovered from gstack, Claude, Codex, or `CLAW_SKILL_ROOTS`
+- `/clear` to reset conversation history
+- `/usage` to show token usage
+- `/quit` to exit the REPL
+
+Installed slash skills accept optional inline arguments after the command name. For example:
+
+```text
+/office-hours Help me think through a launch plan for this repo
+/qa https://staging.example.com
+```
+
+### Skills And Gstack
+
+The launcher scripts automatically expose detected gstack skill roots through `CLAW_SKILL_ROOTS` when a local checkout is found.
+
+Bootstrap gstack for Codex or Claude from the local checkout:
+
+```bash
+./scripts/setup-gstack-codex.sh
+./scripts/setup-gstack-claude.sh
+```
+
+After setup, the Python REPL can list and invoke discovered skills directly. The slash commands are the same across providers; only the backend model changes.
+
+Common flow:
+
+1. Start the REPL with the launcher for the model/provider you want.
+2. Run `/skills` to confirm the available slash commands.
+3. Run the skill with optional inline arguments.
+
+Example with `auto`:
+
+```bash
+./scripts/run-auto.sh
+/skills
+/office-hours Help me think through a launch plan for this repo
+/qa https://your-staging-url
+```
+
+Example with local Ollama:
+
+```bash
+./scripts/run-ollama.sh
+/skills
+/office-hours Help me think through a launch plan for this repo
+/qa https://your-staging-url
+```
+
+Example with Anthropic:
+
+```bash
+export ANTHROPIC_API_KEY=...
+./scripts/run-claude.sh
+/skills
+/office-hours Help me think through a launch plan for this repo
+/qa https://your-staging-url
+```
+
+Example with GLM-5.1:
+
+```bash
+export ZAI_API_KEY=...
+./scripts/run-glm.sh
+/skills
+/office-hours Help me think through a launch plan for this repo
+/qa https://your-staging-url
+```
+
+Notes:
+
+- `/skills` is the quickest way to confirm which slash commands were discovered on the current machine.
+- If `/office-hours` or `/qa` is reported as unknown, run one of the gstack setup scripts or set `CLAW_SKILL_ROOTS` to your local gstack checkout.
+- Slash skills run only inside the interactive REPL. For one-shot non-skill prompts, use `./scripts/run-*.sh ask "..."`.
+
 ## Current Parity Checkpoint
 
 The port now mirrors the archived root-entry file surface, top-level subsystem names, and command/tool inventories much more closely than before. However, it is **not yet** a full runtime-equivalent replacement for the original TypeScript system; the Python tree still contains fewer executable runtime slices than the archived source.

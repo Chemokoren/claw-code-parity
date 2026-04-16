@@ -142,6 +142,39 @@ python3 -m src.main commands --limit 10
 python3 -m src.main tools --limit 10
 ```
 
+## Global Install
+
+If you want to run Claw from any directory on Ubuntu 24.04, the repo now ships with installer scripts that place a managed copy under `~/.local/share/claw-code-parity`, create a virtual environment there, install `requirements.txt`, and add a launcher at `~/.local/bin/claw-code-parity`.
+
+Install from an existing local checkout:
+
+```bash
+./setup.sh
+```
+
+Install directly from GitHub onto a machine:
+
+```bash
+./install.sh
+```
+
+After installation:
+
+```bash
+cd ~/any/project
+claw-code-parity
+claw-code-parity ask "explain this repo"
+```
+
+Notes:
+
+- `claw-code-parity` launches the recommended `auto` mode
+- the managed install keeps its config at `~/.local/share/claw-code-parity/.env`
+- if `~/.local/bin` is not already on your `PATH`, `setup.sh` prints the export line to add
+- `install.sh --branch dev` lets you install a non-default branch when needed
+- run `setup.sh` and `install.sh` as your normal user, not with `sudo`
+- `install.sh` uses `sudo` automatically if Ubuntu packages such as `python3.x-venv` are missing
+
 ## Local Assistant
 
 The Python assistant surface now includes a small launcher toolkit under `scripts/`:

@@ -167,6 +167,15 @@ print_launch_context() {
 }
 
 run_claw() {
-  cd "$ROOT_DIR"
-  python3 -m src.main "$@"
+  local python_bin="${CLAW_PYTHON_BIN:-}"
+
+  if [ -z "$python_bin" ] && [ -x "$ROOT_DIR/.venv/bin/python" ]; then
+    python_bin="$ROOT_DIR/.venv/bin/python"
+  fi
+
+  if [ -z "$python_bin" ]; then
+    python_bin="$(command -v python3)"
+  fi
+
+  exec "$python_bin" "$ROOT_DIR/claw.py" "$@"
 }

@@ -129,23 +129,79 @@ def render_skill_index(
     return '\n'.join(lines)
 
 
+def _read_skill_content(skill_path: Path, max_chars: int = 40_000) -> tuple[str, bool]:
+    """Pre-read the skill file content for injection into the prompt.
+
+    Returns (content, was_truncated).
+    """
+    try:
+        content = skill_path.read_text(encoding='utf-8', errors='replace')
+    except OSError:
+        return '', False
+    if len(content) <= max_chars:
+        return content, False
+    return content[:max_chars], True
+
+
 def build_skill_invocation_prompt(
     skill: InstalledSkill,
     user_request: str,
     workspace: Path,
 ) -> str:
     request = user_request.strip() or 'No extra arguments were provided with the slash command.'
+
+    skill_content, was_truncated = _read_skill_content(skill.skill_path)
+
+    # If we got content, inject it directly so the model has the full instructions
+    if skill_content:
+        truncation_note = ''
+        if was_truncated:
+            truncation_note = (
+                '\n\n[NOTE: The skill file was truncated due to size. '
+                f'Use `file_read` on `{skill.skill_path}` to read the remaining sections '
+                'if you need them to complete later steps.]\n'
+            )
+
+        return (
+            f'## EXECUTE SKILL: /{skill.command_name}\n\n'
+            f'You are now EXECUTING the `/{skill.command_name}` skill workflow. '
+            f'The skill instructions below are EXECUTABLE STEPS, not reference material. '
+            f'You MUST follow them step by step, using your tools (bash, file_read, file_write, '
+            f'file_edit, grep, list_directory) to carry out each action.\n\n'
+            f'**CRITICAL RULES:**\n'
+            f'1. DO NOT summarize what the skill does. EXECUTE it.\n'
+            f'2. DO NOT give the user a tutorial or instructions to follow manually. DO THE WORK.\n'
+            f'3. When the skill says to run a command, use the `bash` tool to run it.\n'
+            f'4. When the skill says to read files, use `file_read` to read them.\n'
+            f'5. When the skill says to check diffs, run `git diff` via `bash`.\n'
+            f'6. When the skill says to review code, actually read the code and analyze it.\n'
+            f'7. When the skill says to find bugs, actually inspect the code and identify real bugs.\n'
+            f'8. When the skill says to fix bugs, use `file_edit` or `file_write` to fix them.\n'
+            f'9. Adapt any tool names to what is available: '
+            f'Bash→bash, Read→file_read, Write→file_write, Edit→file_edit, '
+            f'Grep→grep, Glob→bash (find command), Agent→(not available, skip).\n'
+            f'10. If the skill references `~/.claude/skills/gstack` or `~/.codex/skills/gstack`, '
+            f'treat `{skill.source_root}` as the skill root.\n\n'
+            f'**Skill file:** {skill.skill_path}\n'
+            f'**Skill root:** {skill.source_root}\n'
+            f'**Workspace:** {workspace}\n\n'
+            f'**User request:** {request}\n\n'
+            f'---\n\n'
+            f'## SKILL INSTRUCTIONS (follow these step by step):\n\n'
+            f'{skill_content}'
+            f'{truncation_note}'
+        )
+
+    # Fallback: if we couldn't read the file, tell the model to read it
     return (
-        f'Run the installed skill `/{skill.command_name}` for this turn.\n\n'
-        f'Skill file: {skill.skill_path}\n'
+        f'## EXECUTE SKILL: /{skill.command_name}\n\n'
+        f'You are now EXECUTING the `/{skill.command_name}` skill workflow.\n\n'
+        f'I could not pre-read the skill file. Use `file_read` to read: {skill.skill_path}\n'
+        f'Then EXECUTE the skill step by step — do NOT summarize it.\n\n'
         f'Skill root: {skill.source_root}\n'
         f'Workspace: {workspace}\n\n'
-        'Before doing substantive work, use `file_read` to read the skill file and follow it as '
-        'closely as possible in this Claw environment.\n'
-        'If the skill references Claude Code, Codex, or gstack-specific tool names or paths that '
-        'do not exist here, adapt them to the closest available tools.\n'
-        f'If the skill refers to `~/.claude/skills/gstack` or `~/.codex/skills/gstack`, treat '
-        f'`{skill.source_root}` as the preferred local skill root when appropriate.\n\n'
+        f'If the skill references Claude Code or gstack tool names, adapt them to: '
+        f'bash, file_read, file_write, file_edit, grep, list_directory.\n\n'
         f'User request for `/{skill.command_name}`:\n{request}'
     )
 

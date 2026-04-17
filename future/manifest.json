@@ -1,0 +1,147 @@
+{
+  "current_version": "0.1.0",
+  "last_audit_date": "2026-04-17",
+  "last_audit_anthropic_model": "claude-opus-4-7",
+  "features": {
+    "adaptive_thinking": {
+      "status": "implemented",
+      "version_added": "0.1.0",
+      "anthropic_feature": "thinking: {type: adaptive}",
+      "notes": "Model autonomously decides when to reason. Uses display: omitted for fast streaming."
+    },
+    "effort_levels": {
+      "status": "implemented",
+      "version_added": "0.1.0",
+      "anthropic_feature": "output_config.effort",
+      "notes": "5 levels: low/medium/high/xhigh/max. Controlled via CLAW_EFFORT or /effort command."
+    },
+    "thinking_block_preservation": {
+      "status": "implemented",
+      "version_added": "0.1.0",
+      "anthropic_feature": "Thinking blocks in tool-use messages",
+      "notes": "Thinking blocks preserved and passed back during tool-use loops."
+    },
+    "opus_4_7_default": {
+      "status": "implemented",
+      "version_added": "0.1.0",
+      "anthropic_feature": "claude-opus-4-7",
+      "notes": "Default Anthropic model updated to Opus 4.7."
+    },
+    "skill_content_preload": {
+      "status": "implemented",
+      "version_added": "0.1.0",
+      "anthropic_feature": "N/A (Claude Code behavior)",
+      "notes": "SKILL.md content injected into prompt instead of file path."
+    },
+    "skill_execution_directives": {
+      "status": "implemented",
+      "version_added": "0.1.0",
+      "anthropic_feature": "N/A (Claude Code behavior)",
+      "notes": "EXECUTE SKILL headers with 10 critical rules."
+    },
+    "anthropic_streaming_with_thinking": {
+      "status": "gap",
+      "version_added": null,
+      "anthropic_feature": "Streaming with thinking_delta events",
+      "priority": "P0",
+      "estimated_effort": "2 hours",
+      "notes": "Anthropic path falls back to non-streaming. Need to handle thinking_delta events."
+    },
+    "prompt_caching": {
+      "status": "gap",
+      "version_added": null,
+      "anthropic_feature": "cache_control ephemeral breakpoints",
+      "priority": "P0",
+      "estimated_effort": "1 hour",
+      "notes": "System prompt and tool definitions can be cached for 90% input cost reduction."
+    },
+    "task_budgets": {
+      "status": "gap",
+      "version_added": null,
+      "anthropic_feature": "task-budgets-2026-03-13 beta",
+      "priority": "P1",
+      "estimated_effort": "2 hours",
+      "notes": "Advisory token limit across agentic runs. Prevents runaway costs."
+    },
+    "advisor_tool": {
+      "status": "gap",
+      "version_added": null,
+      "anthropic_feature": "advisor-tool-2026-03-01 beta",
+      "priority": "P1",
+      "estimated_effort": "3 hours",
+      "notes": "Pairs fast executor with Opus advisor. 5-10x cost reduction."
+    },
+    "context_compaction": {
+      "status": "gap",
+      "version_added": null,
+      "anthropic_feature": "Conversation compaction",
+      "priority": "P1",
+      "estimated_effort": "4 hours",
+      "notes": "Auto-compact old messages when context window is exceeded."
+    },
+    "web_search_tool": {
+      "status": "gap",
+      "version_added": null,
+      "anthropic_feature": "web_search_20250305 server-side tool",
+      "priority": "P2",
+      "estimated_effort": "2 hours",
+      "notes": "Server-side web search for skills that reference WebSearch."
+    },
+    "web_fetch_tool": {
+      "status": "gap",
+      "version_added": null,
+      "anthropic_feature": "web_fetch server-side tool",
+      "priority": "P2",
+      "estimated_effort": "1 hour",
+      "notes": "Server-side URL fetching."
+    },
+    "memory_tool": {
+      "status": "gap",
+      "version_added": null,
+      "anthropic_feature": "memory_tool",
+      "priority": "P2",
+      "estimated_effort": "3 hours",
+      "notes": "Persistent memory across sessions."
+    },
+    "coordinator_mode": {
+      "status": "gap",
+      "version_added": null,
+      "anthropic_feature": "Multi-agent coordinator",
+      "priority": "P1",
+      "estimated_effort": "1 week",
+      "notes": "Coordinator decomposes tasks and assigns to worker agents."
+    },
+    "computer_use": {
+      "status": "gap",
+      "version_added": null,
+      "anthropic_feature": "computer_use_20250124 tool",
+      "priority": "P2",
+      "estimated_effort": "1 week",
+      "notes": "Screen interaction via screenshots + click/type."
+    },
+    "git_worktree_isolation": {
+      "status": "gap",
+      "version_added": null,
+      "anthropic_feature": "git worktree per agent",
+      "priority": "P2",
+      "estimated_effort": "4 hours",
+      "notes": "Each agent session in isolated worktree."
+    },
+    "managed_agents": {
+      "status": "gap",
+      "version_added": null,
+      "anthropic_feature": "managed-agents-2026-04-01 beta",
+      "priority": "P3",
+      "estimated_effort": "1 week",
+      "notes": "Run agents on Anthropic infrastructure."
+    },
+    "output_300k_batch": {
+      "status": "gap",
+      "version_added": null,
+      "anthropic_feature": "output-300k-2026-03-24 beta batch",
+      "priority": "P3",
+      "estimated_effort": "1 hour",
+      "notes": "300k output tokens for batch processing."
+    }
+  }
+}

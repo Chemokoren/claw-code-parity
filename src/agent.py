@@ -108,8 +108,9 @@ class Agent:
                     self._append_assistant_text(text_content)
                 break
 
-            # Add assistant message with tool calls
-            self._append_assistant_with_tool_calls_raw(text_content, tool_calls)
+            # Add assistant message with tool calls (and thinking blocks if present)
+            thinking_blocks = getattr(response, 'thinking_blocks', None) or []
+            self._append_assistant_with_tool_calls_raw(text_content, tool_calls, thinking_blocks)
 
             # Execute each tool call and add results
             for tc in tool_calls:
@@ -136,10 +137,20 @@ class Agent:
         else:
             self.messages.append({'role': 'assistant', 'content': text})
 
-    def _append_assistant_with_tool_calls_raw(self, text: str, tool_calls: list[dict]) -> None:
-        """Add the assistant message containing tool calls."""
+    def _append_assistant_with_tool_calls_raw(
+        self, text: str, tool_calls: list[dict], thinking_blocks: list[dict] | None = None,
+    ) -> None:
+        """Add the assistant message containing tool calls.
+
+        For Anthropic native mode with adaptive thinking, thinking blocks
+        MUST be preserved and passed back to maintain reasoning continuity
+        across multi-turn tool-use loops.
+        """
         if self.config.is_anthropic_native:
             content = []
+            # Thinking blocks must come first (before text and tool_use)
+            if thinking_blocks:
+                content.extend(thinking_blocks)
             if text:
                 content.append({'type': 'text', 'text': text})
             for tc in tool_calls:

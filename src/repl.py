@@ -69,6 +69,7 @@ def _show_provider_table(cfg: ClawConfig) -> None:
     console.print(f'  Base URL: {cfg.base_url}')
     console.print(f'  Reason:   {cfg.provider_reason}')
     console.print(f'  Runtime:  {cfg.local_runtime.summary}')
+    console.print(f'  Thinking: {cfg.thinking_mode} (effort: {cfg.effort_level})')
     console.print()
 
     table = Table(title='Available Provider Presets', border_style='dim')
@@ -97,9 +98,13 @@ def _build_help_text(cfg: ClawConfig) -> str:
         '  /help       — show this help',
         '  /provider   — show current provider & list all presets',
         '  /skills     — list installed slash-skill commands',
+        '  /think      — set thinking mode: /think adaptive|enabled|disabled',
+        '  /effort     — set effort level: /effort low|medium|high|xhigh|max',
         '  /clear      — clear conversation history',
         '  /usage      — show token usage',
         '  /quit       — exit (or press Ctrl+C)',
+        '',
+        f'Thinking: {cfg.thinking_mode} | Effort: {cfg.effort_level}',
     ]
     if skills:
         preview = ', '.join(f'/{skill.command_name}' for skill in skills[:8])
@@ -179,7 +184,8 @@ def run_repl(config: ClawConfig | None = None) -> None:
             f'[bold]Workspace:[/bold] {cfg.workspace}\n'
             f'[bold]Provider:[/bold]  {cfg.provider}  |  [bold]Model:[/bold] {cfg.model}\n'
             f'[bold]Base URL:[/bold]  {cfg.base_url}\n\n'
-            f'[bold]Runtime:[/bold]   {cfg.local_runtime.summary}\n\n'
+            f'[bold]Runtime:[/bold]   {cfg.local_runtime.summary}\n'
+            f'[bold]Thinking:[/bold]  {cfg.thinking_mode} (effort: {cfg.effort_level})\n\n'
             f'Type your coding request, or /help for commands.',
             title='[bold green]🐾 Claw Coding Assistant[/bold green]',
             border_style='green',
@@ -220,6 +226,35 @@ def run_repl(config: ClawConfig | None = None) -> None:
                 continue
             elif cmd == '/usage':
                 console.print(f'[dim]{agent.llm.usage}[/dim]')
+                continue
+            elif cmd == '/think':
+                parts = user_input.split()
+                if len(parts) < 2:
+                    console.print(f'[dim]Current thinking mode: {cfg.thinking_mode}[/dim]')
+                    console.print('[dim]Usage: /think adaptive|enabled|disabled[/dim]')
+                else:
+                    mode = parts[1].lower()
+                    if mode in ('adaptive', 'enabled', 'disabled'):
+                        cfg.thinking_mode = mode
+                        agent.config.thinking_mode = mode
+                        console.print(f'[green]Thinking mode set to: {mode}[/green]')
+                    else:
+                        console.print(f'[yellow]Invalid mode: {mode}. Use adaptive, enabled, or disabled.[/yellow]')
+                continue
+            elif cmd == '/effort':
+                from .config import EFFORT_LEVELS
+                parts = user_input.split()
+                if len(parts) < 2:
+                    console.print(f'[dim]Current effort level: {cfg.effort_level}[/dim]')
+                    console.print(f'[dim]Usage: /effort {"|".join(EFFORT_LEVELS)}[/dim]')
+                else:
+                    level = parts[1].lower()
+                    if level in EFFORT_LEVELS:
+                        cfg.effort_level = level
+                        agent.config.effort_level = level
+                        console.print(f'[green]Effort level set to: {level}[/green]')
+                    else:
+                        console.print(f'[yellow]Invalid level: {level}. Use: {"|".join(EFFORT_LEVELS)}[/yellow]')
                 continue
             else:
                 skill = find_skill(cmd, workspace=cfg.workspace)

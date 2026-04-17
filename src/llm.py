@@ -219,20 +219,75 @@ class LLMClient:
         import anthropic
         self._client = anthropic.Anthropic(api_key=self.config.api_key)
 
+    def _build_thinking_config(self) -> dict | None:
+        """Build the thinking configuration for Anthropic API requests."""
+        mode = self.config.thinking_mode.lower()
+        if mode == 'disabled':
+            return {'type': 'disabled'}
+        if mode == 'adaptive':
+            # Adaptive thinking: model decides when to think and how deeply.
+            # display: 'omitted' for faster streaming (skip thinking tokens over the wire).
+            return {'type': 'adaptive', 'display': 'omitted'}
+        if mode == 'enabled':
+            # Legacy manual mode (deprecated on Opus 4.7, still works on 4.6/Sonnet 4.6)
+            budget = min(self.config.max_tokens - 1, 32000)
+            return {'type': 'enabled', 'budget_tokens': budget}
+        # Fallback: adaptive
+        return {'type': 'adaptive', 'display': 'omitted'}
+
+    def _build_output_config(self) -> dict | None:
+        """Build the output_config with effort level for Anthropic API."""
+        effort = self.config.effort_level.lower()
+        if effort in ('low', 'medium', 'high', 'xhigh', 'max'):
+            return {'effort': effort}
+        return {'effort': 'high'}
+
     def _call_anthropic(
         self, messages: list[dict], system: str, tools: list[dict],
     ) -> LLMResponse:
-        response = self._client.messages.create(
-            model=self.config.model,
-            max_tokens=self.config.max_tokens,
-            system=system,
-            messages=messages,
-            tools=tools,
-        )
+        # Determine max_tokens: Opus 4.7 supports 128k output
+        max_tokens = self.config.max_tokens
+        model = self.config.model.lower()
+        if 'opus-4-7' in model or 'opus-4-6' in model:
+            max_tokens = max(max_tokens, 16384)
+
+        kwargs: dict = {
+            'model': self.config.model,
+            'max_tokens': max_tokens,
+            'system': system,
+            'messages': messages,
+            'tools': tools,
+        }
+
+        # Add adaptive thinking if not disabled
+        thinking_config = self._build_thinking_config()
+        if thinking_config and thinking_config.get('type') != 'disabled':
+            kwargs['thinking'] = thinking_config
+            # Add effort level via output_config
+            output_config = self._build_output_config()
+            if output_config:
+                kwargs['output_config'] = output_config
+
+        response = self._client.messages.create(**kwargs)
+
         text_parts = []
         tool_calls = []
+        thinking_blocks = []  # Preserve for multi-turn continuity
+
         for block in response.content:
-            if block.type == 'text':
+            if block.type == 'thinking':
+                # Preserve thinking blocks for passing back in tool-use loops
+                thinking_block = {
+                    'type': 'thinking',
+                    'thinking': getattr(block, 'thinking', ''),
+                    'signature': getattr(block, 'signature', ''),
+                }
+                thinking_blocks.append(thinking_block)
+                # Show summarized thinking to user if available
+                thinking_text = getattr(block, 'thinking', '')
+                if thinking_text:
+                    console.print(f'[dim italic]💭 {thinking_text[:200]}{"..." if len(thinking_text) > 200 else ""}[/dim italic]')
+            elif block.type == 'text':
                 text_parts.append(block.text)
             elif block.type == 'tool_use':
                 tool_calls.append({
@@ -240,10 +295,12 @@ class LLMClient:
                     'name': block.name,
                     'arguments': block.input,
                 })
+
         in_tok = response.usage.input_tokens
         out_tok = response.usage.output_tokens
         self.usage.add(in_tok, out_tok)
-        return LLMResponse(
+
+        resp = LLMResponse(
             text_parts=text_parts,
             tool_calls=tool_calls,
             raw_message=response,
@@ -251,6 +308,9 @@ class LLMClient:
             output_tokens=out_tok,
             stop_reason=response.stop_reason or '',
         )
+        # Attach thinking blocks to the response for preservation
+        resp.thinking_blocks = thinking_blocks  # type: ignore[attr-defined]
+        return resp
 
     # ── Unified interface ──────────────────────────────────────────
     def create_message(

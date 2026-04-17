@@ -274,9 +274,12 @@ class PortingWorkspaceTests(unittest.TestCase):
                 'Help me think through a launch plan',
                 root,
             )
-            self.assertIn('Run the installed skill `/office-hours`', prompt)
+            self.assertIn('EXECUTE SKILL: /office-hours', prompt)
+            self.assertIn('EXECUTABLE STEPS, not reference material', prompt)
             self.assertIn('Help me think through a launch plan', prompt)
             self.assertIn(str(root), prompt)
+            # Verify skill content is pre-loaded into the prompt
+            self.assertIn('# Office Hours', prompt)
 
     def test_subsystem_packages_expose_archive_metadata(self) -> None:
         from src import assistant, bridge, utils

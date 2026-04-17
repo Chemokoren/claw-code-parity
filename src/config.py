@@ -16,7 +16,7 @@ load_dotenv()
 PROVIDER_PRESETS: dict[str, dict[str, str]] = {
     'anthropic': {
         'base_url': 'https://api.anthropic.com/v1',
-        'default_model': 'claude-sonnet-4-20250514',
+        'default_model': 'claude-opus-4-7',
         'env_key': 'ANTHROPIC_API_KEY',
     },
     'openai': {
@@ -41,7 +41,7 @@ PROVIDER_PRESETS: dict[str, dict[str, str]] = {
     },
     'openrouter': {
         'base_url': 'https://openrouter.ai/api/v1',
-        'default_model': 'anthropic/claude-sonnet-4-20250514',
+        'default_model': 'anthropic/claude-opus-4-7',
         'env_key': 'OPENROUTER_API_KEY',
     },
     'gemini': {
@@ -132,6 +132,10 @@ def _resolve_model(provider: str) -> str:
     return preset.get('default_model', 'qwen2.5-coder:7b')
 
 
+# Valid effort levels for adaptive thinking
+EFFORT_LEVELS = ('low', 'medium', 'high', 'xhigh', 'max')
+
+
 @dataclass
 class ClawConfig:
     """Runtime configuration — auto-resolves from env vars."""
@@ -140,10 +144,14 @@ class ClawConfig:
     api_key: str = ''
     base_url: str = ''
     model: str = ''
-    max_tokens: int = 8192
+    max_tokens: int = 16384
     max_tool_rounds: int = 40
     workspace: Path = field(default_factory=lambda: Path.cwd())
     enable_streaming: bool = True
+    # Adaptive thinking: 'adaptive', 'enabled', or 'disabled'
+    thinking_mode: str = field(default_factory=lambda: os.getenv('CLAW_THINKING', 'adaptive'))
+    # Effort level: low, medium, high, xhigh, max
+    effort_level: str = field(default_factory=lambda: os.getenv('CLAW_EFFORT', 'high'))
     provider_reason: str = field(default='', init=False)
     local_runtime: LocalRuntimeStatus = field(init=False)
 
